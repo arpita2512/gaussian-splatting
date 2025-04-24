@@ -18,6 +18,12 @@ from scene.gaussian_model import GaussianModel
 from arguments import ModelParams
 from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
 
+from glob import glob
+from tqdm import tqdm
+from pathlib import Path
+from scene.cameras import Camera
+from PIL import Image
+
 class Scene:
 
     gaussians : GaussianModel
@@ -98,3 +104,22 @@ class Scene:
 
     def getTestCameras(self, scale=1.0):
         return self.test_cameras[scale]
+    
+    def inflateCameras(self, img_path, resolution, imgtype="png", scale=1.0):
+        current_cams = self.train_cameras[scale]
+        uid_start = len(current_cams)        
+
+        for im in tqdm(glob(f"{img_path}/*.{imgtype}")):
+            cam = [x for x in current_cams if x.image_name == Path(im).stem[:4]+f"0001.{imgtype}"][0] # cam for first frame
+            image = Image.open(im)
+
+            orig_w, orig_h = image.size
+            res = round(orig_w/(scale * resolution)), round(orig_h/(scale * resolution))
+            
+            new_cam = Camera(res, colmap_id=cam.colmap_id, R=cam.R, T=cam.T, 
+                             FoVx=cam.FoVx, FoVy=cam.FoVy, depth_params=None,
+                             image=image, invdepthmap=None,
+                             image_name=Path(im).stem+f".{imgtype}", uid=uid_start, data_device=cam.data_device)
+            
+            self.train_cameras[scale].append(new_cam)
+            uid_start += 1
